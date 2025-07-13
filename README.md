@@ -40,80 +40,88 @@ Import required modules:
 ```python
 from pyspark.sql.functions import col, sum, avg, count, round, to_timestamp, window, unix_timestamp, max as max_, lit
 
+---
 
-Load data:
 
-python
-Copy code
+### 📥 Load Dataset
+```python
 df = spark.read.option("header", True).csv("/Workspace/Users/<your-email>/yellow_tripdata_2016-03.csv", inferSchema=True)
-Fix datetime parsing:
+```
 
-python
-Copy code
+### 🕒 Convert String to Timestamp
+```python
 df = df.withColumn("pickup_time", to_timestamp("tpep_pickup_datetime", "dd-MM-yyyy HH:mm"))
-✅ Queries Performed
-Query 1: Add "Revenue" Column
-python
-Copy code
+```
+
+---
+
+## ✅ PySpark Queries
+
+### Query 1: Add a "Revenue" Column
+```python
 df = df.withColumn("Revenue", 
     col("fare_amount") + col("extra") + col("mta_tax") + 
     col("improvement_surcharge") + col("tip_amount") + 
     col("tolls_amount") + col("total_amount")
 )
-Query 2: Passenger Count by Pickup Area
-python
-Copy code
+```
+
+---
+
+### Query 2: Passenger Count by Pickup Area
+```python
 df.groupBy(
-    round(col("pickup_longitude"), 2), 
-    round(col("pickup_latitude"), 2)
-).agg(sum("passenger_count").alias("total_passengers")) \
- .orderBy("total_passengers") \
- .show()
-Query 3: Real-time Avg Fare and Earning by Vendor
-python
-Copy code
-df.groupBy("VendorID") \
-  .agg(
+    round(col("pickup_longitude"), 2).alias("pickup_lon_area"), 
+    round(col("pickup_latitude"), 2).alias("pickup_lat_area")
+).agg(sum("passenger_count").alias("total_passengers"))  .orderBy("total_passengers")  .show()
+```
+
+---
+
+### Query 3: Real-time Avg Fare & Total Earnings by Vendor
+```python
+df.groupBy("VendorID")   .agg(
       round(avg("fare_amount"), 2).alias("avg_fare"),
       round(avg("total_amount"), 2).alias("avg_total_earning")
   ).show()
-Query 4: Moving Count of Payments by Mode (1-hour window)
-python
-Copy code
-df.groupBy(window("pickup_time", "1 hour"), "payment_type") \
-  .agg(count("*").alias("payment_count")) \
-  .orderBy("window") \
-  .show()
-Query 5: Top 2 Vendors by Earnings on a Specific Date
-python
-Copy code
-from pyspark.sql.functions import to_date
+```
 
+---
+
+### Query 4: Moving Count of Payments by Payment Mode (1-Hour Window)
+```python
+df.groupBy(window("pickup_time", "1 hour"), "payment_type")   .agg(count("*").alias("payment_count"))   .orderBy("window")   .show()
+```
+
+---
+
+### Query 5: Top 2 Vendors by Revenue on a Specific Date
+```python
 df_filtered = df.withColumn("trip_date", to_date("pickup_time"))
 
-df_filtered.filter(col("trip_date") == "2016-03-01") \
-    .groupBy("VendorID") \
-    .agg(
+df_filtered.filter(col("trip_date") == "2016-03-01")     .groupBy("VendorID")     .agg(
         sum("total_amount").alias("total_revenue"),
         sum("passenger_count").alias("total_passengers"),
         sum("trip_distance").alias("total_distance")
-    ).orderBy(col("total_revenue").desc()) \
-    .limit(2) \
-    .show()
-Query 6: Most Frequent Passenger Route (Pickup → Dropoff)
-python
-Copy code
+    ).orderBy(col("total_revenue").desc())     .limit(2)     .show()
+```
+
+---
+
+### Query 6: Most Passengers Between a Route of Two Locations
+```python
 df.groupBy(
-    round(col("pickup_longitude"), 2), 
-    round(col("pickup_latitude"), 2), 
-    round(col("dropoff_longitude"), 2), 
-    round(col("dropoff_latitude"), 2)
-).agg(sum("passenger_count").alias("total_passengers")) \
- .orderBy(col("total_passengers").desc()) \
- .show(1)
-Query 7: Top Pickup Locations in Last 10 Seconds of Data
-python
-Copy code
+    round(col("pickup_longitude"), 2).alias("pickup_lon"),
+    round(col("pickup_latitude"), 2).alias("pickup_lat"),
+    round(col("dropoff_longitude"), 2).alias("dropoff_lon"),
+    round(col("dropoff_latitude"), 2).alias("dropoff_lat")
+).agg(sum("passenger_count").alias("total_passengers"))  .orderBy(col("total_passengers").desc())  .show(1)
+```
+
+---
+
+### Query 7: Top Pickup Locations in Last 10 Seconds of Data
+```python
 latest_time = df.select(max_("pickup_time")).first()[0]
 
 df.filter(
@@ -123,11 +131,18 @@ df.filter(
 ).agg(
     sum("passenger_count").alias("total_passengers")
 ).orderBy("total_passengers", ascending=False).show()
-📌 Notes
-Make sure the timestamp format is correctly parsed (dd-MM-yyyy HH:mm) for your version of the CSV.
+```
 
-If pickup_time conversion fails, check the column format using:
+---
 
-python
-Copy code
-df.select("tpep_pickup_datetime").show()
+## 📌 Notes
+
+- Timestamp format must match `dd-MM-yyyy HH:mm` for the `tpep_pickup_datetime` column
+- If timestamp conversion fails, use:
+  ```python
+  df.select("tpep_pickup_datetime").show(5, False)
+  ```
+- If `pickup_time` is null, check for malformed strings or missing data
+
+---
+
